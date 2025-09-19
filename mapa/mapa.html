@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualizador de Datos Catastrales</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            background-color: #2c3e50;
+            color: white;
+            padding: 1rem;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        #container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        #sidebar {
+            width: 300px;
+            background-color: #f8f9fa;
+            padding: 1rem;
+            overflow-y: auto;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+
+        #map-container {
+            flex: 1;
+            position: relative;
+        }
+
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+
+        .control-panel {
+            margin-bottom: 1.5rem;
+        }
+
+        .control-panel h3 {
+            margin-bottom: 0.5rem;
+            color: #2c3e50;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 0.5rem;
+        }
+
+        .info-panel {
+            background-color: white;
+            padding: 1rem;
+            border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 1rem;
+        }
+
+        .legend {
+            padding: 0.5rem;
+            background: white;
+            border-radius: 5px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 0.5rem;
+            border-radius: 3px;
+        }
+
+        .filter-group {
+            margin-bottom: 1rem;
+        }
+
+        .filter-group label {
+            display: block;
+            margin-bottom: 0.25rem;
+            font-weight: bold;
+        }
+
+        .filter-group input, .filter-group select {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+        }
+
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+
+        .feature-list {
+            list-style: none;
+            margin-top: 1rem;
+        }
+
+        .feature-item {
+            padding: 0.75rem;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .feature-item:hover {
+            background-color: #e9ecef;
+        }
+
+        .feature-item h4 {
+            margin-bottom: 0.25rem;
+            color: #2c3e50;
+        }
+
+        .feature-item p {
+            color: #6c757d;
+            font-size: 0.9rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.9);
+            padding: 1rem 2rem;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            z-index: 1000;
+        }
+
+        @media (max-width: 768px) {
+            #container {
+                flex-direction: column;
+            }
+
+            #sidebar {
+                width: 100%;
+                height: 40%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Visualizador de Datos Catastrales</h1>
+        <p>Datos cargados desde: <span id="data-source">datos_actualizado.json</span></p>
+    </header>
+
+    <div id="container">
+        <div id="sidebar">
+            <div class="control-panel">
+                <h3>Controles</h3>
+                <div class="info-panel">
+                    <p><strong>Total de elementos:</strong> <span id="total-features">0</span></p>
+                    <p><strong>Elementos visibles:</strong> <span id="visible-features">0</span></p>
+                </div>
+
+                <div class="filter-group">
+                    <label for="year-filter">Filtrar por año de construcción:</label>
+                    <input type="range" id="year-filter" min="1900" max="2025" step="1" value="1900">
+                    <span id="year-value">1900</span>
+                </div>
+
+                <div class="filter-group">
+                    <label for="search-feature">Buscar referencia catastral:</label>
+                    <input type="text" id="search-feature" placeholder="Ej: 2749704YJ0624N0001DI">
+                </div>
+
+                <button id="reset-view">Restablecer vista</button>
+            </div>
+
+            <div class="control-panel">
+                <h3>Leyenda</h3>
+                <div class="legend" id="legend"></div>
+            </div>
+
+            <div class="control-panel">
+                <h3>Elementos</h3>
+                <ul class="feature-list" id="feature-list"></ul>
+            </div>
+        </div>
+
+        <div id="map-container">
+            <div id="map"></div>
+            <div class="loading" id="loading">Cargando datos...</div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        // Variables globales
+        let map;
+        let geoJsonLayer;
+        let allFeatures = [];
+
+        // Inicializar el mapa
+        function initMap() {
+            // Crear mapa centrado en España
+            map = L.map('map', {
+                center: [40.4168, -3.7038], // Coordenadas de España
+                zoom: 6,
+                preferCanvas: true // Mejor rendimiento para muchos elementos :cite[8]
+            });
+
+            // Añadir capa base de OpenStreetMap
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            // Cargar los datos GeoJSON
+            loadGeoJsonData();
+        }
+
+        // Cargar datos GeoJSON
+        function loadGeoJsonData() {
+            fetch('https://raw.githubusercontent.com/ahorrillo/Mapas/refs/heads/main/datos_actualizado_min.json')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('No se pudo cargar el archivo JSON');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    document.getElementById('loading').style.display = 'none';
+                    processGeoJsonData(data);
+                })
+                .catch(error => {
+                    document.getElementById('loading').textContent = 'Error: ' + error.message;
+                    console.error('Error:', error);
+                });
+        }
+
+        // Procesar datos GeoJSON
+        function processGeoJsonData(data) {
+            if (!data || !data.features) {
+                throw new Error('Formato de JSON inválido. Se esperaba un FeatureCollection.');
+            }
+
+            allFeatures = data.features;
+            document.getElementById('total-features').textContent = allFeatures.length;
+            document.getElementById('visible-features').textContent = allFeatures.length;
+
+            // Crear capa GeoJSON
+            geoJsonLayer = L.geoJSON(data, {
+                pointToLayer: function(feature, latlng) {
+                    // Personalizar marcadores para puntos :cite[4]:cite[7]
+                    return L.circleMarker(latlng, {
+                        radius: 6,
+                        fillColor: getColorForYear(feature.properties.FECHAALTA),
+                        color: "#000",
+                        weight: 1,
+                        opacity: 1,
+                        fillOpacity: 0.8
+                    });
+                },
+                style: function(feature) {
+                    // Estilo para polígonos y líneas :cite[1]:cite[4]
+                    return {
+                        fillColor: getColorForYear(feature.properties.FECHAALTA),
+                        weight: 2,
+                        opacity: 1,
+                        color: 'white',
+                        dashArray: '3',
+                        fillOpacity: 0.7
+                    };
+                },
+                onEachFeature: function(feature, layer) {
+                    // Añadir popup y eventos para cada feature :cite[4]
+                    if (feature.properties) {
+                        let popupContent = `<div><strong>RefCat:</strong> ${feature.properties.RefCat || 'N/A'}</div>`;
+                        popupContent += `<div><strong>Año construcción:</strong> ${feature.properties.FECHAALTA || 'N/A'}</div>`;
+
+                        // Añadir más propiedades si existen
+                        for (let key in feature.properties) {
+                            if (key !== 'RefCat' && key !== 'FECHAALTA') {
+                                popupContent += `<div><strong>${key}:</strong> ${feature.properties[key]}</div>`;
+                            }
+                        }
+
+                        layer.bindPopup(popupContent);
+                    }
+
+                    // Eventos para resaltar al pasar el ratón :cite[3]
+                    layer.on({
+                        mouseover: function(e) {
+                            const layer = e.target;
+                            layer.setStyle({
+                                weight: 3,
+                                color: '#666',
+                                dashArray: '',
+                                fillOpacity: 0.9
+                            });
+
+                            if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
+                                layer.bringToFront();
+                            }
+                        },
+                        mouseout: function(e) {
+                            geoJsonLayer.resetStyle(e.target);
+                        },
+                        click: function(e) {
+                            // Centrar el mapa en el elemento seleccionado
+                            map.fitBounds(e.target.getBounds());
+                        }
+                    });
+                }
+            }).addTo(map);
+
+            // Ajustar la vista para mostrar todos los elementos
+            map.fitBounds(geoJsonLayer.getBounds());
+
+            // Actualizar la lista de elementos y la leyenda
+            updateFeatureList(allFeatures);
+            updateLegend();
+
+            // Configurar event listeners para los filtros
+            setupEventListeners();
+        }
+
+        // Obtener color según el año de construcción
+        function getColorForYear(yearString) {
+            if (!yearString) return '#808080';
+
+            // Extraer el año (los primeros 4 caracteres)
+            const year = parseInt(yearString.toString().substring(0, 4));
+
+            if (isNaN(year)) return '#808080';
+
+            // Asignar colores según el año
+            if (year < 1950) return '#d73027';
+            if (year < 1970) return '#f46d43';
+            if (year < 1990) return '#fdae61';
+            if (year < 2010) return '#74add1';
+            return '#4575b4';
+        }
+
+        // Actualizar la lista de elementos en el panel lateral
+        function updateFeatureList(features) {
+            const featureList = document.getElementById('feature-list');
+            featureList.innerHTML = '';
+
+            features.forEach(feature => {
+                const li = document.createElement('li');
+                li.className = 'feature-item';
+
+                const year = feature.properties.FECHAALTA ?
+                    feature.properties.FECHAALTA.toString().substring(0, 4) : 'N/A';
+
+                li.innerHTML = `
+                    <h4>${feature.properties.RefCat || 'Sin referencia'}</h4>
+                    <p><strong>Año:</strong> ${year}</p>
+                    <p><strong>Tipo:</strong> ${feature.geometry.type}</p>
+                `;
+
+                // Al hacer clic en un elemento de la lista, centrar el mapa en ese elemento
+                li.addEventListener('click', function() {
+                    const layer = findLayerByFeatureId(feature);
+                    if (layer) {
+                        map.fitBounds(layer.getBounds());
+                        layer.openPopup();
+                    }
+                });
+
+                featureList.appendChild(li);
+            });
+        }
+
+        // Encontrar capa por ID de feature
+        function findLayerByFeatureId(feature) {
+            let foundLayer = null;
+
+            geoJsonLayer.eachLayer(function(layer) {
+                if (layer.feature === feature) {
+                    foundLayer = layer;
+                }
+            });
+
+            return foundLayer;
+        }
+
+        // Actualizar la leyenda
+        function updateLegend() {
+            const legend = document.getElementById('legend');
+            legend.innerHTML = '';
+
+            const grades = [1900, 1950, 1970, 1990, 2010, 2025];
+            const labels = [];
+
+            // Generar items de la leyenda
+            for (let i = 0; i < grades.length - 1; i++) {
+                const from = grades[i];
+                const to = grades[i + 1];
+
+                const legendItem = document.createElement('div');
+                legendItem.className = 'legend-item';
+
+                const colorBox = document.createElement('div');
+                colorBox.className = 'legend-color';
+                colorBox.style.backgroundColor = getColorForYear(from.toString());
+
+                const label = document.createElement('span');
+                label.textContent = `${from} - ${to}`;
+
+                legendItem.appendChild(colorBox);
+                legendItem.appendChild(label);
+                legend.appendChild(legendItem);
+            }
+        }
+
+        // Configurar event listeners para filtros y controles
+        function setupEventListeners() {
+            // Filtro por año
+            const yearFilter = document.getElementById('year-filter');
+            const yearValue = document.getElementById('year-value');
+
+            yearFilter.addEventListener('input', function() {
+                yearValue.textContent = this.value;
+                filterFeaturesByYear(parseInt(this.value));
+            });
+
+            // Búsqueda por referencia catastral
+            const searchInput = document.getElementById('search-feature');
+            searchInput.addEventListener('input', function() {
+                filterFeaturesByRefCat(this.value);
+            });
+
+            // Botón para restablecer la vista
+            document.getElementById('reset-view').addEventListener('click', function() {
+                map.fitBounds(geoJsonLayer.getBounds());
+                yearFilter.value = 1900;
+                yearValue.textContent = '1900';
+                searchInput.value = '';
+                resetFilters();
+            });
+        }
+
+        // Filtrar features por año
+        function filterFeaturesByYear(year) {
+            geoJsonLayer.eachLayer(function(layer) {
+                const featureYear = layer.feature.properties.FECHAALTA ?
+                    parseInt(layer.feature.properties.FECHAALTA.toString().substring(0, 4)) : 0;
+
+                if (featureYear >= year) {
+                    if (!map.hasLayer(layer)) {
+                        geoJsonLayer.addLayer(layer);
+                    }
+                } else {
+                    if (map.hasLayer(layer)) {
+                        geoJsonLayer.removeLayer(layer);
+                    }
+                }
+            });
+
+            // Actualizar contador de elementos visibles
+            updateVisibleFeaturesCount();
+        }
+
+        // Filtrar features por referencia catastral
+        function filterFeaturesByRefCat(refCat) {
+            if (!refCat) {
+                // Si no hay texto, mostrar todos los elementos
+                resetFilters();
+                return;
+            }
+
+            const searchTerm = refCat.toLowerCase();
+
+            geoJsonLayer.eachLayer(function(layer) {
+                const featureRefCat = layer.feature.properties.RefCat ?
+                    layer.feature.properties.RefCat.toLowerCase() : '';
+
+                if (featureRefCat.includes(searchTerm)) {
+                    if (!map.hasLayer(layer)) {
+                        geoJsonLayer.addLayer(layer);
+                    }
+                } else {
+                    if (map.hasLayer(layer)) {
+                        geoJsonLayer.removeLayer(layer);
+                    }
+                }
+            });
+
+            // Actualizar contador de elementos visibles
+            updateVisibleFeaturesCount();
+        }
+
+        // Restablecer todos los filtros
+        function resetFilters() {
+            geoJsonLayer.eachLayer(function(layer) {
+                if (!map.hasLayer(layer)) {
+                    geoJsonLayer.addLayer(layer);
+                }
+            });
+
+            // Actualizar contador de elementos visibles
+            updateVisibleFeaturesCount();
+        }
+
+        // Actualizar contador de elementos visibles
+        function updateVisibleFeaturesCount() {
+            let visibleCount = 0;
+
+            geoJsonLayer.eachLayer(function(layer) {
+                if (map.hasLayer(layer)) {
+                    visibleCount++;
+                }
+            });
+
+            document.getElementById('visible-features').textContent = visibleCount;
+        }
+
+        // Inicializar el mapa cuando se cargue la página
+        window.onload = initMap;
+    </script>
+</body>
+</html>
