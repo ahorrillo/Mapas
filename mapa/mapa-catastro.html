@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Mapa UTM Badajoz con Proj4Leaflet</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+    <style>
+        #map { width: 100%; height: 500px; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.8.0/proj4.js"></script>
+    <script src="https://unpkg.com/proj4leaflet"></script>
+    <script>
+        // Definir tu sistema de referencia UTM 30N WGS84
+        var crs = new L.Proj.CRS('EPSG:32630',
+            '+proj=utm +zone=30 +datum=WGS84 +units=m +no_defs',
+            {
+                resolutions: [8192, 4096, 2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1, 0.5],
+                origin: [166021.4431, 0] // Origen aproximado UTM zona 30N
+            }
+        );
+
+        // Inicializa el mapa en Badajoz (aproximadamente)
+        var map = L.map('map', {
+            crs: crs,
+            center: [4302000, 676700], // Coordenadas aproximadas UTM; ajusta para tu zona si es necesario
+            zoom: 4
+        });
+
+        // Capa base en EPSG:3857 para referencia visual
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            // Este tilelayer está en EPSG:3857, así que habrá cierta distorsión visual.
+            attribution: 'Map data © OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Aquí deberías cargar tu GeoJSON. Si el archivo está en otro archivo aparte usa fetch o AJAX.
+        var geojson = "PARCELA-FINAL.geojson"; // Reemplaza con la ruta correcta a tu archivo GeoJSON
+
+        // Añade tu GeoJSON proyectado con Proj4Leaflet
+        L.Proj.geoJson(geojson, {
+            style: { color: 'red', fillOpacity: 0.3 },
+            onEachFeature: function (feature, layer) {
+                if (feature.properties) {
+                    var popupText = "";
+                    for (var key in feature.properties) {
+                        popupText += "<b>" + key + "</b>: " + feature.properties[key] + "<br/>";
+                    }
+                    layer.bindPopup(popupText);
+                }
+            }
+        }).addTo(map);
+    </script>
+</body>
+</html>
