@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualizador de Parcelas Catastrales - Badajoz</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+    <!-- Proj4js para conversión de coordenadas -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.8.0/proj4.js"></script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background-color: #f5f5f5;
+        }
+
+        header {
+            background: linear-gradient(135deg, #2c3e50, #3498db);
+            color: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            font-size: 1rem;
+            opacity: 0.9;
+        }
+
+        #container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        #sidebar {
+            width: 300px;
+            background: white;
+            padding: 1.5rem;
+            overflow-y: auto;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+
+        #map-container {
+            flex: 1;
+            position: relative;
+        }
+
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+
+        .control-panel {
+            margin-bottom: 2rem;
+        }
+
+        .control-panel h3 {
+            margin-bottom: 1rem;
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 0.5rem;
+            font-size: 1.2rem;
+        }
+
+        .info-panel {
+            background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 1rem;
+        }
+
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            padding: 0.3rem 0;
+        }
+
+        .info-label {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .info-value {
+            color: #3498db;
+            font-weight: 500;
+        }
+
+        .filter-group {
+            margin-bottom: 1rem;
+        }
+
+        .filter-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .filter-group input, .filter-group select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid #e0e0e0;
+            border-radius: 5px;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+        }
+
+        .filter-group input:focus, .filter-group select:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+
+        button {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: all 0.3s;
+            width: 100%;
+            margin-top: 0.5rem;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(52, 152, 219, 0.3);
+        }
+
+        .legend {
+            background: white;
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            margin-right: 0.75rem;
+            border-radius: 3px;
+            border: 1px solid #ccc;
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 2rem 3rem;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            z-index: 1000;
+            text-align: center;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .coordinates-info {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 0.5rem 1rem;
+            border-radius: 5px;
+            font-size: 0.8rem;
+            z-index: 1000;
+        }
+
+        .search-results {
+            background: #e8f4fd;
+            padding: 0.5rem;
+            border-radius: 4px;
+            margin-top: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 768px) {
+            #container {
+                flex-direction: column;
+            }
+
+            #sidebar {
+                width: 100%;
+                height: auto;
+                max-height: 40vh;
+            }
+
+            .header-content {
+                flex-direction: column;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <div>
+                <h1>Visualizador de Parcelas Catastrales</h1>
+                <div class="subtitle">Badajoz - Parcelas coloreadas por año de construcción</div>
+            </div>
+            <div id="data-info">
+                <div class="subtitle" id="data-source">Cargando datos...</div>
+            </div>
+        </div>
+    </header>
+
+    <div id="container">
+        <div id="sidebar">
+            <div class="control-panel">
+                <h3>📊 Información del Mapa</h3>
+                <div class="info-panel">
+                    <div class="info-item">
+                        <span class="info-label">Total de parcelas:</span>
+                        <span class="info-value" id="total-features">0</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Parcelas visibles:</span>
+                        <span class="info-value" id="visible-features">0</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Sistema original:</span>
+                        <span class="info-value">UTM 29N</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Sistema visualizado:</span>
+                        <span class="info-value">WGS84</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-panel">
+                <h3>🔍 Búsqueda</h3>
+                <div class="filter-group">
+                    <label for="search-refcat">Buscar por REFCAT:</label>
+                    <input type="text" id="search-refcat" placeholder="Ej: 6720402PD7062B">
+                </div>
+                <div class="filter-group">
+                    <label for="search-calle">Buscar por calle:</label>
+                    <input type="text" id="search-calle" placeholder="Ej: LEBRATOS LOS">
+                </div>
+                <div id="search-results" class="search-results" style="display: none;">
+                    <!-- Resultados de búsqueda se mostrarán aquí -->
+                </div>
+                <button id="reset-view">🔄 Restablecer Vista</button>
+            </div>
+
+            <div class="control-panel">
+                <h3>🎨 Leyenda por Año</h3>
+                <div class="legend" id="legend">
+                    <!-- La leyenda se generará automáticamente -->
+                </div>
+            </div>
+        </div>
+
+        <div id="map-container">
+            <div id="map"></div>
+            <div class="coordinates-info" id="coordinates-info">
+                Lat: 0.000, Lng: 0.000
+            </div>
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <div>Convirtiendo coordenadas UTM a WGS84...</div>
+                <div id="loading-details" style="margin-top: 0.5rem; font-size: 0.9rem;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        // Variables globales
+        let map;
+        let geoJsonLayer;
+        let allFeatures = [];
+        let currentGeoJsonData = null;
+
+        // Definir sistemas de coordenadas
+        proj4.defs("EPSG:25829", "+proj=utm +zone=29 +ellps=GRS80 +units=m +no_defs");
+        proj4.defs("WGS84", "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs");
+
+        // Función para obtener color según el año
+        function getColor(year) {
+            if (year === 0) return "#9b9b9b";
+            else if (year >= 1 && year <= 1800) return "#ffffb2";
+            else if (year <= 1899) return "#fed976";
+            else if (year <= 1920) return "#feb24c";
+            else if (year <= 1940) return "#fd8d3c";
+            else if (year <= 1969) return "#fc4e2a";
+            else if (year <= 1999) return "#f03b20";
+            else if (year <= 2008) return "#bd0026";
+            else if (year <= 2020) return "#800026";
+            else if (year <= 2025) return "#55001a";
+            else return "#000000";
+        }
+
+        // Función para convertir coordenadas UTM 29N a WGS84
+        function convertirCoordenadasUTM(geojson) {
+            const totalFeatures = geojson.features.length;
+            let featuresConvertidas = 0;
+
+            geojson.features.forEach((feature, index) => {
+                if (feature.geometry && feature.geometry.coordinates) {
+                    if (feature.geometry.type === 'MultiPolygon') {
+                        feature.geometry.coordinates.forEach(polygon => {
+                            polygon.forEach(ring => {
+                                ring.forEach(coord => {
+                                    // Convertir UTM 29N a WGS84
+                                    const [longitude, latitude] = proj4("EPSG:25829", "WGS84", [coord[0], coord[1]]);
+                                    coord[0] = parseFloat(longitude.toFixed(6));
+                                    coord[1] = parseFloat(latitude.toFixed(6));
+                                });
+                            });
+                        });
+                    } else if (feature.geometry.type === 'Polygon') {
+                        feature.geometry.coordinates.forEach(ring => {
+                            ring.forEach(coord => {
+                                const [longitude, latitude] = proj4("EPSG:25829", "WGS84", [coord[0], coord[1]]);
+                                coord[0] = parseFloat(longitude.toFixed(6));
+                                coord[1] = parseFloat(latitude.toFixed(6));
+                            });
+                        });
+                    }
+
+                    featuresConvertidas++;
+                    const porcentaje = Math.round((featuresConvertidas / totalFeatures) * 100);
+                    document.getElementById('loading-details').textContent =
+                        `Procesando: ${featuresConvertidas}/${totalFeatures} parcelas (${porcentaje}%)`;
+                }
+            });
+
+            return geojson;
+        }
+
+        // Inicializar el mapa
+        function initMap() {
+            // Crear mapa centrado en Badajoz (coordenadas aproximadas)
+            map = L.map('map', {
+                center: [38.8816, -6.9703], // Coordenadas de Badajoz
+                zoom: 15,
+                preferCanvas: true // Mejor rendimiento para muchos elementos
+            });
+
+            // Añadir capa base de OpenStreetMap
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                maxZoom: 19
+            }).addTo(map);
+
+            // Cargar los datos GeoJSON
+            cargarGeoJsonData();
+        }
+
+        // Cargar datos GeoJSON
+        function cargarGeoJsonData() {
+            // Aquí debes reemplazar con la ruta a tu archivo
+            fetch('https://raw.githubusercontent.com/ahorrillo/Mapas/refs/heads/main/mapa/PARCELA-FINAL_actualizado_min.json')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('No se pudo cargar el archivo GeoJSON');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    document.getElementById('loading-details').textContent = 'Convirtiendo coordenadas...';
+
+                    // Convertir coordenadas UTM a WGS84
+                    setTimeout(() => {
+                        const geojsonConvertido = convertirCoordenadasUTM(data);
+                        currentGeoJsonData = geojsonConvertido;
+                        procesarGeoJsonData(geojsonConvertido);
+                    }, 100);
+                })
+                .catch(error => {
+                    document.getElementById('loading').innerHTML =
+                        '<div style="color: red;">Error: ' + error.message + '</div>';
+                    console.error('Error:', error);
+                });
+        }
+
+        // Procesar datos GeoJSON convertidos
+        function procesarGeoJsonData(data) {
+            if (!data || !data.features) {
+                throw new Error('Formato de JSON inválido. Se esperaba un FeatureCollection.');
+            }
+
+            allFeatures = data.features;
+            document.getElementById('total-features').textContent = allFeatures.length;
+            document.getElementById('visible-features').textContent = allFeatures.length;
+            document.getElementById('data-source').textContent = 'Parcelas coloreadas por año de construcción';
+
+            // Ocultar loading
+            document.getElementById('loading').style.display = 'none';
+
+            // Función para obtener estilo basado en el año
+            function getStyle(feature) {
+                const year = feature.properties.FECHAALTA || 0;
+                return {
+                    fillColor: getColor(year),
+                    weight: 2,
+                    opacity: 1,
+                    color: 'white',
+                    dashArray: '3',
+                    fillOpacity: 0.7
+                };
+            }
+
+            // Función para resaltar
+            function highlightFeature(e) {
+                const layer = e.target;
+                layer.setStyle({
+                    weight: 4,
+                    color: '#f39c12',
+                    fillOpacity: 0.9
+                });
+                layer.bringToFront();
+            }
+
+            // Función para resetear estilo
+            function resetHighlight(e) {
+                geoJsonLayer.resetStyle(e.target);
+            }
+
+            // Función para hacer zoom al feature
+            function zoomToFeature(e) {
+                const layer = e.target;
+                const bounds = layer.getBounds();
+                if (bounds.isValid()) {
+                    map.fitBounds(bounds, { padding: [20, 20] });
+                }
+            }
+
+            // Crear capa GeoJSON
+            geoJsonLayer = L.geoJSON(data, {
+                style: getStyle,
+                onEachFeature: function(feature, layer) {
+                    // Crear contenido del popup
+                    const year = feature.properties.FECHAALTA || 'Desconocido';
+                    const popupContent = `
+                        <div style="min-width: 250px;">
+                            <h3 style="margin: 0 0 10px 0; color: #2c3e50;">Parcela Catastral</h3>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
+                                <strong>REFCAT:</strong> <span>${feature.properties.REFCAT || 'N/A'}</span>
+                                <strong>Área:</strong> <span>${(feature.properties.AREA || 0).toLocaleString()} m²</span>
+                                <strong>Año construcción:</strong> <span>${year}</span>
+                                <strong>Calle:</strong> <span>${feature.properties.CALLE || 'N/A'}</span>
+                            </div>
+                        </div>
+                    `;
+
+                    layer.bindPopup(popupContent);
+
+                    // Eventos para interactividad
+                    layer.on({
+                        mouseover: highlightFeature,
+                        mouseout: resetHighlight,
+                        click: zoomToFeature
+                    });
+                }
+            }).addTo(map);
+
+            // Ajustar la vista para mostrar todos los elementos
+            // const bounds = geoJsonLayer.getBounds();
+            // if (bounds.isValid()) {
+            //     map.fitBounds(bounds, { padding: [50, 50] });
+            // }
+
+            // Actualizar la leyenda
+            actualizarLeyenda();
+
+            // Configurar event listeners
+            configurarEventListeners();
+
+            // Configurar evento de coordenadas del ratón
+            map.on('mousemove', function(e) {
+                document.getElementById('coordinates-info').textContent =
+                    `Lat: ${e.latlng.lat.toFixed(6)}, Lng: ${e.latlng.lng.toFixed(6)}`;
+            });
+        }
+
+        // Actualizar la leyenda
+        function actualizarLeyenda() {
+            const legend = document.getElementById('legend');
+            legend.innerHTML = '';
+
+            const ranges = [
+                { min: 0, max: 0, label: 'Año desconocido', color: '#9b9b9b' },
+                { min: 1, max: 1800, label: 'Hasta 1800', color: '#ffffb2' },
+                { min: 1801, max: 1899, label: '1801-1899', color: '#fed976' },
+                { min: 1900, max: 1920, label: '1900-1920', color: '#feb24c' },
+                { min: 1921, max: 1940, label: '1921-1940', color: '#fd8d3c' },
+                { min: 1941, max: 1969, label: '1941-1969', color: '#fc4e2a' },
+                { min: 1970, max: 1999, label: '1970-1999', color: '#f03b20' },
+                { min: 2000, max: 2008, label: '2000-2008', color: '#bd0026' },
+                { min: 2009, max: 2020, label: '2009-2020', color: '#800026' },
+                { min: 2021, max: 2025, label: '2021-2025', color: '#55001a' },
+                { min: 2026, max: 9999, label: 'Post 2025', color: '#000000' }
+            ];
+
+            ranges.forEach(range => {
+                const legendItem = document.createElement('div');
+                legendItem.className = 'legend-item';
+
+                const colorBox = document.createElement('div');
+                colorBox.className = 'legend-color';
+                colorBox.style.backgroundColor = range.color;
+
+                const label = document.createElement('span');
+                label.textContent = range.label;
+                label.style.fontSize = '0.85rem';
+
+                legendItem.appendChild(colorBox);
+                legendItem.appendChild(label);
+                legend.appendChild(legendItem);
+            });
+        }
+
+        // Configurar event listeners para filtros y controles
+        function configurarEventListeners() {
+            // Búsqueda por REFCAT
+            const searchRefcatInput = document.getElementById('search-refcat');
+            searchRefcatInput.addEventListener('input', function() {
+                filtrarParcelas(this.value, 'refcat');
+            });
+
+            // Búsqueda por calle
+            const searchCalleInput = document.getElementById('search-calle');
+            searchCalleInput.addEventListener('input', function() {
+                filtrarParcelas(this.value, 'calle');
+            });
+
+            // Botón para restablecer la vista
+            document.getElementById('reset-view').addEventListener('click', function() {
+                resetearFiltros();
+            });
+        }
+
+        // Función para filtrar parcelas por REFCAT o calle - VERSIÓN CORREGIDA
+        function filtrarParcelas(searchTerm, tipo) {
+            const resultsContainer = document.getElementById('search-results');
+
+            // Si el término de búsqueda está vacío, resetear filtros
+            if (!searchTerm || searchTerm.trim() === '') {
+                resetearFiltros();
+                resultsContainer.style.display = 'none';
+                return;
+            }
+
+            const term = searchTerm.toLowerCase().trim();
+            let visibleCount = 0;
+            let matchingLayers = []; // Array para almacenar las capas que coinciden
+
+            // 1. Recorrer todas las capas y mostrar/ocultar según coincidan
+            geoJsonLayer.eachLayer(function(layer) {
+                let match = false;
+
+                if (tipo === 'refcat') {
+                    const featureRefCat = layer.feature.properties.REFCAT ?
+                        layer.feature.properties.REFCAT.toLowerCase() : '';
+                    match = featureRefCat.includes(term);
+                } else if (tipo === 'calle') {
+                    const featureCalle = layer.feature.properties.CALLE ?
+                        layer.feature.properties.CALLE.toLowerCase() : '';
+                    match = featureCalle.includes(term);
+                }
+
+                if (match) {
+                    // Si coincide, asegurarse de que la capa está en el mapa
+                    if (!map.hasLayer(layer)) {
+                        geoJsonLayer.addLayer(layer);
+                    }
+                    visibleCount++;
+                    matchingLayers.push(layer);
+                } else {
+                    // Si no coincide, quitarla del mapa
+                    if (map.hasLayer(layer)) {
+                        geoJsonLayer.removeLayer(layer);
+                    }
+                }
+            });
+
+            // Actualizar el contador
+            document.getElementById('visible-features').textContent = visibleCount;
+
+            // Manejar la visualización de resultados y el ajuste del mapa
+            if (visibleCount > 0) {
+                resultsContainer.innerHTML = `✅ Encontradas ${visibleCount} parcelas`;
+                resultsContainer.style.display = 'block';
+
+                // Ajustar la vista del mapa a los resultados encontrados
+                // Es crucial crear un nuevo grupo con las capas coincidentes
+                setTimeout(() => {
+                    if (matchingLayers.length > 0) {
+                        const resultGroup = new L.featureGroup(matchingLayers);
+                        const newBounds = resultGroup.getBounds();
+                        // VERIFICAR SI LOS LÍMITES SON VÁLIDOS antes de ajustar el mapa:cite[4]
+                        if (newBounds.isValid()) {
+                            map.fitBounds(newBounds, { padding: [50, 50], maxZoom: 16 });
+                        } else {
+                            console.warn("Los límites calculados no son válidos.");
+                        }
+                    }
+                }, 50); // Pequeña pausa para asegurar que las capas se han añadido al mapa
+
+            } else {
+                resultsContainer.innerHTML = '❌ No se encontraron parcelas con ese criterio.';
+                resultsContainer.style.display = 'block';
+                // No intentar ajustar los límites si no hay resultados
+            }
+        }
+
+        // Función para resetear todos los filtros - VERSIÓN CORREGIDA
+        function resetearFiltros() {
+            // MOSTRAR todas las capas
+            geoJsonLayer.eachLayer(function(layer) {
+                if (!map.hasLayer(layer)) {
+                    geoJsonLayer.addLayer(layer);
+                }
+            });
+
+            // Actualizar el contador
+            document.getElementById('visible-features').textContent = allFeatures.length;
+
+            // Ocultar el panel de resultados de búsqueda
+            const resultsContainer = document.getElementById('search-results');
+            resultsContainer.style.display = 'none';
+
+            // Limpiar los campos de búsqueda
+            document.getElementById('search-refcat').value = '';
+            document.getElementById('search-calle').value = '';
+
+            // Ajustar la vista para mostrar todas las parcelas
+            const bounds = geoJsonLayer.getBounds();
+            // Verificar que los límites son válidos antes de ajustar la vista:cite[4]
+            if (bounds.isValid()) {
+                map.fitBounds(bounds, { padding: [50, 50] });
+            }
+        }
+
+        // Inicializar el mapa cuando se cargue la página
+        window.onload = initMap;
+    </script>
+</body>
+</html>
