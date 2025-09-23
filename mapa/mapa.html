@@ -438,10 +438,8 @@
             }).addTo(map);
 
             // Añadir capa de satélite (opcional)
-            L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
-                maxZoom: 20,
-                subdomains: ['mt0','mt1','mt2','mt3'],
-                attribution: 'Google Satellite'
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 20
             }).addTo(map);
 
             // Cargar los datos GeoJSON
@@ -451,7 +449,7 @@
         // Cargar datos GeoJSON
         function cargarGeoJsonData() {
             // Aquí debes reemplazar 'parcelas.geojson' con la ruta a tu archivo
-            fetch('parcelas.geojson')
+            fetch('https://raw.githubusercontent.com/ahorrillo/Mapas/refs/heads/main/mapa/parcelas.json')
                 .then(response => {
                     if (!response.ok) {
                         throw new Error('No se pudo cargar el archivo GeoJSON');
